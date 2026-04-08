@@ -3,3 +3,4 @@ praw
 pillow
 requests
 gunicorn
+psutil
