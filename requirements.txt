@@ -1,1 +1,4 @@
-
+flask
+praw
+pillow
+requests
