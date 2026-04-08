@@ -13,7 +13,7 @@ from flask import Flask, jsonify, render_template_string, request
 app = Flask(__name__)
 
 # ==== CONFIG ====
-BOT_NAME = "u/addgoku"
+BOT_NAME = "u/YOUR_BOT_NAME"
 TEST_IMAGE = "https://picsum.photos/400/300"  # manual test image
 
 # Reddit placeholder (fill later)
@@ -52,7 +52,8 @@ def add_goku_to_image(image_url):
 
     base.paste(goku_resized, (x, y), goku_resized)
 
-    output = "output.png"
+    output = f"static/output_{int(time.time())}.png"
+    os.makedirs("static", exist_ok=True)
     base.save(output)
     return output
 
@@ -88,7 +89,6 @@ def background_loop():
 threading.Thread(target=background_loop, daemon=True).start()
 
 # ==== ROUTES ====
-
 @app.route("/ping")
 def ping():
     return "pong 🔥"
@@ -108,38 +108,48 @@ def get_tasks():
 def add_goku_manual():
     output = add_goku_to_image(TEST_IMAGE)
     if output:
-        return f"Goku added! <a href='{output}' target='_blank'>View</a>"
+        return jsonify({"result": output})
     else:
-        return "Goku.webp not found 😢"
+        return jsonify({"error": "Goku.webp not found 😢"})
 
 # ==== DASHBOARD ====
 @app.route("/")
 def dashboard():
-    cpu = psutil.cpu_percent()
-    ram = psutil.virtual_memory().percent
-    net = psutil.net_io_counters()
     return render_template_string("""
 <!DOCTYPE html>
 <html>
 <head>
 <title>Goku Bot Dashboard</title>
 <style>
-body { font-family: Arial; background: #111; color: #eee; }
-.task { padding: 10px; border-bottom: 1px solid #333; }
-.done { color: lime; }
-.processing { color: orange; }
-.error { color: red; }
-button { padding:5px 10px; margin:5px; cursor:pointer; }
+body { font-family: Arial; background: #111; color: #eee; margin:0; padding:0; }
+header { padding:10px; background:#222; display:flex; justify-content:space-between; align-items:center; }
+header h1 { margin:0; font-size:1.5em; }
+button { padding:5px 10px; cursor:pointer; }
+#stats { padding:10px; display:flex; gap:20px; flex-wrap:wrap; }
+#tasks { display:grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap:10px; padding:10px; }
+.task { padding:10px; border:1px solid #333; border-radius:5px; background:#1a1a1a; }
+.done { border-color: lime; }
+.processing { border-color: orange; }
+.error { border-color: red; }
+img { max-width: 100%; display:block; margin-top:5px; border-radius:3px; }
 </style>
 </head>
 <body>
-<h1>🔥 Goku Bot Task Manager</h1>
-<p>CPU: {{cpu}}% | RAM: {{ram}}% | Network sent: {{net.bytes_sent}} bytes | received: {{net.bytes_recv}} bytes</p>
+<header>
+<h1>🔥 Goku Bot Dashboard</h1>
+<button onclick="addGoku()">Add Goku to test image</button>
+</header>
+<div id="stats">
+<p>CPU: <span id="cpu"></span>%</p>
+<p>RAM: <span id="ram"></span>%</p>
+<p>Network Sent: <span id="nets"></span> bytes</p>
+<p>Network Recv: <span id="netr"></span> bytes</p>
 <p>Goku.webp found: {{goku}}</p>
-<button onclick="fetch('/add_goku').then(r=>r.text().then(alert))">Add Goku to test image</button>
+</div>
 <div id="tasks"></div>
+
 <script>
-async function loadTasks() {
+async function loadStats() {
     const res = await fetch('/tasks');
     const data = await res.json();
     const container = document.getElementById('tasks');
@@ -150,17 +160,51 @@ async function loadTasks() {
         div.innerHTML = `
             <b>ID:</b> ${t.id}<br>
             <b>Status:</b> ${t.status}<br>
-            <b>Image:</b> <a href="${t.image}" target="_blank">open</a>
+            <b>Original:</b> <a href="${t.image}" target="_blank">open</a>
+            ${t.result ? `<br><b>Goku Image:</b><br><img src="${t.result}">` : ""}
         `;
         container.appendChild(div);
     });
 }
-setInterval(loadTasks, 1000);
-loadTasks();
+
+async function loadSystem() {
+    const res = await fetch('/system_stats');
+    const stats = await res.json();
+    document.getElementById('cpu').innerText = stats.cpu;
+    document.getElementById('ram').innerText = stats.ram;
+    document.getElementById('nets').innerText = stats.net_sent;
+    document.getElementById('netr').innerText = stats.net_recv;
+}
+
+async function addGoku() {
+    const res = await fetch('/add_goku');
+    const json = await res.json();
+    if(json.result){
+        alert("Goku added! Check below for image.");
+    } else {
+        alert(json.error);
+    }
+}
+
+setInterval(loadStats, 1000);
+setInterval(loadSystem, 1000);
+loadStats();
+loadSystem();
 </script>
 </body>
 </html>
-""", cpu=cpu, ram=ram, net=net, goku=GOKU_FOUND)
+""", goku=GOKU_FOUND)
+
+# ==== SYSTEM STATS API ====
+@app.route("/system_stats")
+def system_stats():
+    net = psutil.net_io_counters()
+    return jsonify({
+        "cpu": psutil.cpu_percent(),
+        "ram": psutil.virtual_memory().percent,
+        "net_sent": net.bytes_sent,
+        "net_recv": net.bytes_recv
+    })
 
 # ==== START ====
 if __name__ == "__main__":
