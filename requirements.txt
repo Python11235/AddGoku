@@ -1,5 +1,4 @@
 flask
-praw
 pillow
 requests
 gunicorn
