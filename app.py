@@ -42,9 +42,9 @@ tasks = []
 tasks_lock = threading.Lock()
 network_start = psutil.net_io_counters()
 
-def new_task(status, result=None):
+def new_task(status, result=None, link=None):
     with tasks_lock:
-        task = {"id": len(tasks), "status": status, "result": result}
+        task = {"id": len(tasks), "status": status, "result": result, "link": link}
         tasks.append(task)
     return task
 
@@ -91,6 +91,29 @@ def add_goku_to_image(image_url):
         return None
 
 # =============================
+# IMGUR UPLOAD
+# =============================
+def upload_to_imgur(result):
+    # Imgur links survive restarts and redeploys, unlike files in static/
+    if not os.getenv("IMGUR_CLIENT_ID"):
+        return None
+
+    try:
+        with open(os.path.join(app.static_folder, os.path.basename(result)), "rb") as f:
+            r = requests.post(
+                "https://api.imgur.com/3/image",
+                headers={"Authorization": f"Client-ID {os.getenv('IMGUR_CLIENT_ID')}"},
+                files={"image": f},
+                timeout=30
+            )
+        r.raise_for_status()
+        return r.json()["data"]["link"]
+
+    except Exception as e:
+        print("Imgur error:", e, flush=True)
+        return None
+
+# =============================
 # REDDIT BOT
 # =============================
 def find_image_url(submission):
@@ -129,11 +152,15 @@ def handle_mention(item, bot_mention, public_url):
         task = new_task("processing")
 
         result = add_goku_to_image(image_url)
+        task["result"] = result
 
-        if result:
-            item.reply(f"[Goku has been added 🔥]({public_url}{result})")
+        # Prefer imgur, fall back to the self-hosted copy
+        link = result and (upload_to_imgur(result) or (public_url and public_url + result))
+
+        if link:
+            item.reply(f"[Goku has been added 🔥]({link})")
             task["status"] = "done"
-            task["result"] = result
+            task["link"] = link
         else:
             task["status"] = "failed"
 
@@ -158,8 +185,10 @@ def start_reddit_bot():
         public_url = os.getenv("PUBLIC_URL").rstrip("/")
     elif os.getenv("RENDER_EXTERNAL_HOSTNAME"):
         public_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
+    elif os.getenv("IMGUR_CLIENT_ID"):
+        public_url = None
     else:
-        print("PUBLIC_URL (or RENDER_EXTERNAL_HOSTNAME) missing.", flush=True)
+        print("IMGUR_CLIENT_ID or PUBLIC_URL (or RENDER_EXTERNAL_HOSTNAME) missing.", flush=True)
         return
 
     reddit = praw.Reddit(
@@ -210,8 +239,9 @@ def get_tasks():
 @app.route("/test")
 def test():
     result = add_goku_to_image(TEST_IMAGE)
+    link = result and upload_to_imgur(result)
 
-    task = new_task("done" if result else "failed", result)
+    task = new_task("done" if result else "failed", result, link)
 
     return jsonify(task)
 
@@ -245,7 +275,7 @@ def dashboard():
             html += `<div class="card">
                 <b>Task ${t.id}</b><br>
                 Status: ${t.status}<br>
-                ${t.result ? `<a href="${t.result}" target="_blank"><img src="${t.result}"></a>` : ""}
+                ${t.result ? `<a href="${t.link || t.result}" target="_blank"><img src="${t.result}"></a>` : ""}
             </div>`;
         });
         document.getElementById('tasks').innerHTML = html;
