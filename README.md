@@ -18,7 +18,8 @@ Environment variables:
 | `REDDIT_USERNAME` | yes | The bot account |
 | `REDDIT_PASSWORD` | yes | |
 | `REDDIT_USER_AGENT` | no | Defaults to a generic AddGoku user agent |
-| `PUBLIC_URL` | on non-Render hosts | Public base URL the result links point to. On Render, `RENDER_EXTERNAL_HOSTNAME` is used automatically |
+| `IMGUR_CLIENT_ID` | recommended | Uploads results to imgur so reply links keep working after restarts/redeploys. Register an app with "Anonymous usage without user authorization" at https://api.imgur.com/oauth2/addclient |
+| `PUBLIC_URL` | if no imgur, on non-Render hosts | Public base URL for self-hosted result links (used when imgur isn't set up or an upload fails). On Render, `RENDER_EXTERNAL_HOSTNAME` is used automatically |
 
 ## Run
 
@@ -28,4 +29,4 @@ gunicorn app:app --workers 1 --threads 4
 
 or `python app.py` for local testing. Keep it to **one** worker: every worker starts its own bot, so more workers means duplicate replies.
 
-The dashboard is at `/`, and `/test` adds Goku to a random test image.
+The dashboard is at `/`, and `/test` adds Goku to a random test image (and uploads it to imgur, if set up). It can be run once a minute.
