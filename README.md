@@ -29,4 +29,4 @@ gunicorn app:app --workers 1 --threads 4
 
 or `python app.py` for local testing. Keep it to **one** worker: every worker starts its own bot, so more workers means duplicate replies.
 
-The dashboard is at `/`, and `/test` adds Goku to a random test image.
+The dashboard is at `/`, and `/test` adds Goku to a random test image (and uploads it to imgur, if set up). It can be run once a minute.

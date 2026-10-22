@@ -17,6 +17,7 @@ app = Flask(__name__)
 
 USER_AGENT = "AddGoku bot (github.com/python11235/AddGoku)"
 TEST_IMAGE = "https://picsum.photos/800/600"
+TEST_COOLDOWN = 60
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 # =============================
@@ -236,12 +237,26 @@ def get_tasks():
 # =============================
 # MANUAL TEST
 # =============================
+last_test = 0
+test_lock = threading.Lock()
+
 @app.route("/test")
 def test():
+    global last_test
+
+    # Anyone can reach this, so don't let it be spammed
+    # (every test is an imgur upload when imgur is set up)
+    with test_lock:
+        if time.time() - last_test < TEST_COOLDOWN:
+            return jsonify({"error": f"Slow down, one test per {TEST_COOLDOWN}s"}), 429
+        last_test = time.time()
+
     result = add_goku_to_image(TEST_IMAGE)
     link = result and upload_to_imgur(result)
 
-    task = new_task("done" if result else "failed", result, link)
+    # With imgur set up, the test only passes if the upload worked too
+    ok = result and (link or not os.getenv("IMGUR_CLIENT_ID"))
+    task = new_task("done" if ok else "failed", result, link)
 
     return jsonify(task)
 
@@ -301,7 +316,7 @@ def dashboard():
     Net Recv: <span id="recv"></span><br>
     Goku: <span id="goku"></span><br><br>
 
-    <button onclick="fetch('/test').then(update)">Test Goku</button>
+    <button onclick="fetch('/test').then(r=>r.json()).then(j=>{ if(j.error) alert(j.error); update(); })">Test Goku</button>
 
     <div id="tasks" class="grid"></div>
     </body>
